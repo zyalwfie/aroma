@@ -16,8 +16,9 @@ class ProductSeeder extends Seeder
             'description' => 'Kemeja pria dengan bahan katun, cocok untuk formal maupun casual.',
             'price' => 175000,
             'stock' => 20,
-            'image' => 'products/kemeja1.jpg', // pastikan gambar ini tersedia di public/storage/products/
+            'image' => 'products/kemeja1.jpg',
             'status' => true,
+            'category_id' => rand(1, 5),
         ]);
 
         Product::create([
@@ -28,6 +29,7 @@ class ProductSeeder extends Seeder
             'stock' => 50,
             'image' => 'products/kaos1.jpg',
             'status' => true,
+            'category_id' => rand(1, 5),
         ]);
         Product::create([
             'name' => 'Klos Hitam',
@@ -37,6 +39,7 @@ class ProductSeeder extends Seeder
             'stock' => 50,
             'image' => 'products/kaos1.jpg',
             'status' => true,
+            'category_id' => rand(1, 5),
         ]);
         Product::create([
             'name' => 'Ka Hitam',
@@ -46,6 +49,7 @@ class ProductSeeder extends Seeder
             'stock' => 50,
             'image' => 'products/kaos1.jpg',
             'status' => true,
+            'category_id' => rand(1, 5),
         ]);
         Product::create([
             'name' => 'Kaos Polo',
@@ -55,6 +59,7 @@ class ProductSeeder extends Seeder
             'stock' => 50,
             'image' => 'products/kaos1.jpg',
             'status' => true,
+            'category_id' => rand(1, 5),
         ]);
         Product::create([
             'name' => 'Ktam',
@@ -64,6 +69,7 @@ class ProductSeeder extends Seeder
             'stock' => 50,
             'image' => 'products/kaos1.jpg',
             'status' => true,
+            'category_id' => rand(1, 5),
         ]);
         Product::create([
             'name' => 'Kaam',
@@ -73,6 +79,7 @@ class ProductSeeder extends Seeder
             'stock' => 50,
             'image' => 'products/kaos1.jpg',
             'status' => true,
+            'category_id' => rand(1, 5),
         ]);
         Product::create([
             'name' => 'Hitam',
@@ -82,6 +89,7 @@ class ProductSeeder extends Seeder
             'stock' => 50,
             'image' => 'products/kaos1.jpg',
             'status' => true,
+            'category_id' => rand(1, 5),
         ]);
         Product::create([
             'name' => 'Kaos  Hitam',
@@ -91,6 +99,7 @@ class ProductSeeder extends Seeder
             'stock' => 50,
             'image' => 'products/kaos1.jpg',
             'status' => true,
+            'category_id' => rand(1, 5),
         ]);
         Product::create([
             'name' => ' Polos Hitam',
@@ -100,6 +109,7 @@ class ProductSeeder extends Seeder
             'stock' => 50,
             'image' => 'products/kaos1.jpg',
             'status' => true,
+            'category_id' => rand(1, 5),
         ]);
     }
 }

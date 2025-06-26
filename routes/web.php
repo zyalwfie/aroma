@@ -65,15 +65,12 @@ Route::middleware('auth')->prefix('account')->name('account.')->group(function (
 
 // PRODUCT COLLECTION
 Route::get('/collection', [ProductController::class, 'collection'])->name('product.collection');
-Route::get('/collection', [ProductController::class, 'collection'])->name('product.collection');
 
 // FILTER BY CATEGORY
 Route::get('/product/category/{slug}', [ProductController::class, 'category'])->name('product.category');
 
 // DETAIL PRODUCT (dengan slug)
 Route::get('/product/{slug}', [ProductController::class, 'detail'])->name('product.detail');
-
-
 
 // ADD TO CART (harus login)
 Route::post('/add-to-cart', [CartController::class, 'add'])->middleware('auth')->name('cart.add');

@@ -12,12 +12,11 @@ class DatabaseSeeder extends Seeder
      */
     // database/seeders/DatabaseSeeder.php
 
-public function run(): void
-{
-    $this->call([
-        ProductSeeder::class,
-    ]);
-}
-
-    
+    public function run(): void
+    {
+        $this->call([
+            CategorySeeder::class,
+            ProductSeeder::class,
+        ]);
+    }
 }
