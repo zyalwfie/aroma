@@ -11,8 +11,8 @@ class RajaOngkirService
 
     public function __construct()
     {
-        $this->baseUrl = config('services.rajaongkir.base_url');
-        $this->apiKey = config('services.rajaongkir.api_key');
+        $this->baseUrl = config('services.rajaongkir.url');
+        $this->apiKey = config('services.rajaongkir.key');
     }
 
     public function getProvinces()

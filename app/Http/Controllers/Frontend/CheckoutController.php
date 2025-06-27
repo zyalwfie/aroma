@@ -10,7 +10,6 @@ use App\Models\OrderItem;
 use Midtrans\Config;
 use Midtrans\Snap;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Http;
 
 class CheckoutController extends Controller
 {
@@ -22,15 +21,20 @@ class CheckoutController extends Controller
             return redirect()->route('cart.index')->with('error', 'Keranjang Anda kosong.');
         }
 
+        $totalWeight = $cartItems->sum(function ($item) {
+            $weight = $item->product->weight ?? 500;
+            return $weight * $item->quantity;
+        });
+
         $user = auth()->user()->load('addresses');
-        return view('frontend.product.checkout', compact('user', 'cartItems'));
+        return view('frontend.product.checkout', compact('user', 'cartItems', 'totalWeight'));
     }
 
     public function process(Request $request)
     {
         $request->validate([
             'address_id' => 'required|exists:addresses,id',
-            'shipping_method' => 'required|in:jne,pos,tiki',
+            'shipping_method' => 'required|string',
             'payment_method' => 'required|in:midtrans,cod',
             'terms' => 'accepted',
         ]);
@@ -45,12 +49,9 @@ class CheckoutController extends Controller
         $address = $user->addresses()->findOrFail($request->address_id);
         $total = $cartItems->sum(fn($item) => $item->product->price * $item->quantity);
 
-        $shippingCost = match ($request->shipping_method) {
-            'jne' => 20000,
-            'pos' => 25000,
-            'tiki' => 18000,
-            default => 20000,
-        };
+        list($shippingMethod, $shippingCost) = explode(':', $request->shipping_method);
+        $shippingCost = (int) $shippingCost;
+
         $grandTotal = $total + $shippingCost;
 
         $midtransOrderId = $user->id . '-' . time();
@@ -62,7 +63,8 @@ class CheckoutController extends Controller
             'total' => $grandTotal,
             'status' => 'pending',
             'payment_method' => $request->payment_method,
-            'shipping_method' => $request->shipping_method,
+            'shipping_method' => $shippingMethod,
+            'shipping_cost' => $shippingCost,
             'midtrans_order_id' => $midtransOrderId,
         ]);
 
@@ -113,7 +115,7 @@ class CheckoutController extends Controller
                     'id' => 'SHIPPING',
                     'price' => $shippingCost,
                     'quantity' => 1,
-                    'name' => 'Biaya Pengiriman',
+                    'name' => 'Biaya Pengiriman (' . strtoupper($shippingMethod) . ')',
                 ];
 
                 $snap = Snap::createTransaction($params);
@@ -125,7 +127,6 @@ class CheckoutController extends Controller
                 ]);
 
                 return redirect($paymentUrl);
-
             } catch (\Exception $e) {
                 Log::error('Midtrans Error: ' . $e->getMessage());
                 return back()->with('error', 'Gagal terhubung ke Midtrans.');
@@ -135,34 +136,47 @@ class CheckoutController extends Controller
         return redirect()->route('home')->with('success', 'Pesanan berhasil dibuat.');
     }
 
-   public function midtransCallback(Request $request)
-{
-    $notif = new \Midtrans\Notification();
+    public function midtransCallback(Request $request)
+    {
+        $notif = new \Midtrans\Notification();
 
-    $transaction = $notif->transaction_status;
-    $type = $notif->payment_type;
-    $fraud = $notif->fraud_status;
-    $orderIdRaw = $notif->order_id;
+        $transaction = $notif->transaction_status;
+        $type = $notif->payment_type;
+        $fraud = $notif->fraud_status;
+        $orderIdRaw = $notif->order_id;
 
-    // Pecah order ID → ambil ID order asli dari yang dikirim Midtrans
-    $orderId = explode('-', $orderIdRaw)[0];
+        $orderId = explode('-', $orderIdRaw)[0];
 
-    $order = Order::find($orderId);
+        $order = Order::find($orderId);
 
-    if (!$order) {
-        Log::error('Order not found for Midtrans callback: ' . $orderId);
-        return response()->json(['message' => 'Order not found'], 404);
+        if (!$order) {
+            Log::error('Order not found for Midtrans callback: ' . $orderId);
+            return response()->json(['message' => 'Order not found'], 404);
+        }
+
+        if ($transaction == 'capture' || $transaction == 'settlement') {
+            $order->update(['payment_status' => 'paid', 'status' => 'paid']);
+        } elseif ($transaction == 'pending') {
+            $order->update(['payment_status' => 'pending']);
+        } elseif (in_array($transaction, ['deny', 'expire', 'cancel'])) {
+            $order->update(['payment_status' => 'failed', 'status' => 'cancelled']);
+        }
+
+        return response()->json(['message' => 'Callback received'], 200);
     }
 
-    // Update status
-    if ($transaction == 'capture' || $transaction == 'settlement') {
-        $order->update(['payment_status' => 'paid', 'status' => 'paid']);
-    } elseif ($transaction == 'pending') {
-        $order->update(['payment_status' => 'pending']);
-    } elseif (in_array($transaction, ['deny', 'expire', 'cancel'])) {
-        $order->update(['payment_status' => 'failed', 'status' => 'cancelled']);
+    public function paymentFinish()
+    {
+        return redirect()->route('home')->with('success', 'Pembayaran berhasil! Pesanan Anda sedang diproses.');
     }
 
-    return response()->json(['message' => 'Callback received'], 200);
-}
+    public function paymentUnfinish()
+    {
+        return redirect()->route('home')->with('info', 'Pembayaran belum selesai. Silahkan selesaikan pembayaran Anda.');
+    }
+
+    public function paymentError()
+    {
+        return redirect()->route('home')->with('error', 'Pembayaran gagal. Silahkan coba lagi atau hubungi customer service.');
+    }
 }

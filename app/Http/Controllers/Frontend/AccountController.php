@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Review;
+use App\Services\RajaOngkirService;
 
 class AccountController extends Controller
 {
@@ -19,7 +20,7 @@ class AccountController extends Controller
     {
         $user = auth()->user()->load('addresses');
         $orders = $user->orders()->with('orderItems.product')->latest()->get();
-        $reviews = $user->reviews()->with('product')->latest()->get(); 
+        $reviews = $user->reviews()->with('product')->latest()->get();
         return view('frontend.account.index', compact('user', 'orders', 'reviews'));
     }
 
@@ -104,15 +105,35 @@ class AccountController extends Controller
     // ===================== ADDRESS =====================
     public function addAddress(Request $request)
     {
-        $request->validate([
-            'label' => 'required|string|max:50',
-            'address' => 'required|string|max:255',
+        $validated = $request->validate([
+            'label' => 'required|string|max:100',
+            'province_id' => 'required|string',
+            'city_id' => 'required|string',
+            'address' => 'required|string',
+            'zip' => 'nullable|string|max:10',
+            'phone' => 'nullable|string|max:20',
         ]);
 
-        Address::create([
-            'user_id' => auth()->id(),
-            'label' => $request->label,
-            'address' => $request->address,
+        $rajaOngkir = app(RajaOngkirService::class);
+
+        $cities = $rajaOngkir->getCities($validated['province_id']);
+        $city = collect($cities)->firstWhere('city_id', $validated['city_id']);
+
+        $provinces = $rajaOngkir->getProvinces();
+        $province = collect($provinces)->firstWhere('province_id', $validated['province_id']);
+
+        $cityName = $city ? ($city['type'] . ' ' . $city['city_name']) : '';
+        $provinceName = $province ? $province['province'] : '';
+
+        auth()->user()->addresses()->create([
+            'label' => $validated['label'],
+            'province_id' => $validated['province_id'],
+            'province' => $provinceName,
+            'city_id' => $validated['city_id'],
+            'city' => $cityName,
+            'address' => $validated['address'],
+            'zip' => $validated['zip'] ?? null,
+            'phone' => $validated['phone'] ?? null,
         ]);
 
         return back()->with('success', 'Alamat berhasil ditambahkan.');
@@ -120,23 +141,54 @@ class AccountController extends Controller
 
     public function updateAddress(Request $request, $id)
     {
-        $request->validate([
-            'label' => 'required|string|max:50',
-            'address' => 'required|string|max:255',
+        $address = auth()->user()->addresses()->findOrFail($id);
+
+        $validated = $request->validate([
+            'label' => 'required|string|max:100',
+            'province_id' => 'required|string',
+            'city_id' => 'required|string',
+            'address' => 'required|string',
+            'zip' => 'nullable|string|max:10',
+            'phone' => 'nullable|string|max:20',
         ]);
 
-        $address = Address::where('user_id', auth()->id())->findOrFail($id);
-        $address->update($request->only('label', 'address'));
+        $rajaOngkir = app(RajaOngkirService::class);
+
+        $cities = $rajaOngkir->getCities($validated['province_id']);
+        $city = collect($cities)->firstWhere('city_id', $validated['city_id']);
+
+        $provinces = $rajaOngkir->getProvinces();
+        $province = collect($provinces)->firstWhere('province_id', $validated['province_id']);
+
+        $cityName = $city ? ($city['type'] . ' ' . $city['city_name']) : '';
+        $provinceName = $province ? $province['province'] : '';
+
+        $address->update([
+            'label' => $validated['label'],
+            'province_id' => $validated['province_id'],
+            'province' => $provinceName,
+            'city_id' => $validated['city_id'],
+            'city' => $cityName,
+            'address' => $validated['address'],
+            'zip' => $validated['zip'] ?? null,
+            'phone' => $validated['phone'] ?? null,
+        ]);
 
         return back()->with('success', 'Alamat berhasil diperbarui.');
     }
 
     public function deleteAddress($id)
     {
-        $address = Address::where('user_id', auth()->id())->findOrFail($id);
+        $address = auth()->user()->addresses()->findOrFail($id);
         $address->delete();
 
         return back()->with('success', 'Alamat berhasil dihapus.');
+    }
+
+    public function getAddressData($id)
+    {
+        $address = auth()->user()->addresses()->findOrFail($id);
+        return response()->json($address);
     }
 
     // ===================== ORDERS =====================
@@ -148,77 +200,76 @@ class AccountController extends Controller
             ->with('orderItems.product')
             ->get();
 
-        return view('frontend.account.orders', compact('orders'));
+        return view('frontend.account.order', compact('orders'));
     }
 
     public function orderHistory()
-{
-    $orders = Order::with('orderItems.product')
-        ->where('user_id', auth()->id())
-        ->where('status', 'completed')
-        ->latest()
-        ->get();
+    {
+        $orders = Order::with('orderItems.product')
+            ->where('user_id', auth()->id())
+            ->where('status', 'completed')
+            ->latest()
+            ->get();
 
-    return view('frontend.account.history', compact('orders'));
-}
+        return view('frontend.account.history', compact('orders'));
+    }
 
 
     public function markOrderAsCompleted(Order $order)
-{
-    if ($order->user_id !== auth()->id()) {
-        abort(403, 'Unauthorized');
+    {
+        if ($order->user_id !== auth()->id()) {
+            abort(403, 'Unauthorized');
+        }
+
+        if (!in_array($order->status, ['paid', 'processing'])) {
+            return back()->with('error', 'Pesanan tidak bisa ditandai sebagai selesai.');
+        }
+
+        $order->update([
+            'status' => 'completed',
+            'payment_status' => 'paid',
+        ]);
+
+        return back()->with('success', 'Pesanan telah ditandai sebagai selesai.');
     }
-
-    if (!in_array($order->status, ['paid', 'processing'])) {
-        return back()->with('error', 'Pesanan tidak bisa ditandai sebagai selesai.');
-    }
-
-    $order->update([
-        'status' => 'completed',
-        'payment_status' => 'paid',
-    ]);
-
-    return back()->with('success', 'Pesanan telah ditandai sebagai selesai.');
-}
 
 
     // ===================== REVIEWS =====================
     public function reviewForm(Order $order)
-{
-    if ($order->user_id !== auth()->id()) {
-        abort(403);
+    {
+        if ($order->user_id !== auth()->id()) {
+            abort(403);
+        }
+
+        $products = $order->orderItems()->with('product')->get();
+
+        return view('frontend.account.review-form', compact('order', 'products'));
     }
 
-    $products = $order->orderItems()->with('product')->get();
-
-    return view('frontend.account.review-form', compact('order', 'products'));
-}
 
 
+    public function submitReview(Request $request, Order $order)
+    {
+        $request->validate([
+            'reviews.*.product_id' => 'required|exists:products,id',
+            'reviews.*.rating' => 'required|integer|min:1|max:5',
+            'reviews.*.comment' => 'nullable|string',
+        ]);
 
-public function submitReview(Request $request, Order $order)
-{
-    $request->validate([
-        'reviews.*.product_id' => 'required|exists:products,id',
-        'reviews.*.rating' => 'required|integer|min:1|max:5',
-        'reviews.*.comment' => 'nullable|string',
-    ]);
+        foreach ($request->reviews as $reviewData) {
+            Review::updateOrCreate(
+                ['user_id' => auth()->id(), 'product_id' => $reviewData['product_id']],
+                ['rating' => $reviewData['rating'], 'comment' => $reviewData['comment']]
+            );
+        }
 
-    foreach ($request->reviews as $reviewData) {
-        Review::updateOrCreate(
-            ['user_id' => auth()->id(), 'product_id' => $reviewData['product_id']],
-            ['rating' => $reviewData['rating'], 'comment' => $reviewData['comment']]
-        );
+        return redirect()->route('account.orders.history')->with('success', 'Ulasan berhasil disimpan!');
     }
-
-    return redirect()->route('account.orders.history')->with('success', 'Ulasan berhasil disimpan!');
-}
 
 
     public function myReviews()
-{
-    $reviews = auth()->user()->reviews()->with('product')->latest()->get();
-    return view('frontend.account.my-reviews', compact('reviews'));
-}
-
+    {
+        $reviews = auth()->user()->reviews()->with('product')->latest()->get();
+        return view('frontend.account.my-reviews', compact('reviews'));
+    }
 }

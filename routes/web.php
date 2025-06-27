@@ -1,12 +1,14 @@
 <?php
+
+use App\Http\Controllers\RajaOngkirController;
 use App\Http\Controllers\Frontend\CheckoutController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Frontend\HomeController;
 use App\Http\Controllers\Frontend\ProductController;
 use App\Http\Controllers\Frontend\CartController;
-use App\Http\Controllers\Api\RajaOngkirController;
 use App\Http\Controllers\Frontend\AccountController;
 use App\Http\Controllers\Auth\RegisteredUserController;
+
 /*
 |--------------------------------------------------------------------------
 | Web Routes
@@ -36,6 +38,7 @@ Route::middleware('auth')->prefix('account')->name('account.')->group(function (
     Route::post('/address/add', [AccountController::class, 'addAddress'])->name('address.add');
     Route::put('/address/{id}', [AccountController::class, 'updateAddress'])->name('address.update');
     Route::delete('/address/{id}', [AccountController::class, 'deleteAddress'])->name('address.delete');
+    Route::get('/account/address/{id}/data', [AccountController::class, 'getAddressData'])->name('account.address.data');
 
     // Orders
     Route::get('/orders', [AccountController::class, 'ordersInProgress'])->name('orders');

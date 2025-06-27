@@ -1,5 +1,6 @@
 <?php
-namespace App\Http\Controllers\Api;
+
+namespace App\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
@@ -27,8 +28,22 @@ class RajaOngkirController extends Controller
             'courier' => 'required|string',
         ]);
 
-        return response()->json(
-            $rajaOngkir->getCost($validated['destination'], $validated['weight'], $validated['courier'])
-        );
+        $couriers = explode(',', $validated['courier']);
+        $results = [];
+
+        foreach ($couriers as $courier) {
+            $courier = trim($courier);
+            $courierResult = $rajaOngkir->getCost(
+                $validated['destination'],
+                $validated['weight'],
+                $courier
+            );
+
+            if (!empty($courierResult)) {
+                $results = array_merge($results, $courierResult);
+            }
+        }
+
+        return response()->json($results);
     }
 }

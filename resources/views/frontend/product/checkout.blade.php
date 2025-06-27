@@ -15,14 +15,16 @@
           <h3>Pilih Alamat Pengiriman</h3>
           <div class="d-flex flex-wrap gap-3">
             @foreach($user->addresses as $address)
-              <label class="btn btn-outline-dark">
-                <input type="radio" name="address_id" value="{{ $address->id }}" required hidden>
-                <!-- <input type="radio" name="selected_address_id" value="{{ $address->id }}" required hidden> -->
+              <label class="btn btn-outline-dark address-item">
+                <input type="radio" name="address_id" value="{{ $address->id }}" data-city="{{ $address->city_id }}" required hidden>
                 <div>{{ $address->label }}<br><small>{{ $address->address }}</small></div>
               </label>
             @endforeach
             <a href="{{ route('account.index') }}" class="btn btn-outline-primary">Tambah Alamat</a>
           </div>
+          @error('address_id')
+            <small class="text-danger">{{ $message }}</small>
+          @enderror
         </div>
 
         <!-- ORDER DETAILS -->
@@ -60,11 +62,20 @@
           <!-- SHIPPING & PAYMENT -->
           <div class="form-group mt-4">
             <label for="shipping_method">Pilih Pengiriman</label>
-            <select class="form-control" name="shipping_method" required>
-              <option value="jne">JNE (Rp 20.000)</option>
-              <option value="pos">POS (Rp 25.000)</option>
-              <option value="tiki">TIKI (Rp 18.000)</option>
-            </select>
+            <div class="form-control shipping-loading p-3 text-center d-none">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p class="mt-2">Mengambil data ongkos kirim...</p>
+            </div>
+            <div class="shipping-container">
+              <select class="form-control" name="shipping_method" id="shipping_method" required disabled>
+                <option value="">Pilih alamat pengiriman terlebih dahulu</option>
+              </select>
+            </div>
+            @error('shipping_method')
+              <small class="text-danger">{{ $message }}</small>
+            @enderror
           </div>
 
           <div class="form-group mt-3">
@@ -73,6 +84,9 @@
               <option value="midtrans">Midtrans Payment</option>
               <option value="cod">Bayar di Tempat (COD)</option>
             </select>
+            @error('payment_method')
+              <small class="text-danger">{{ $message }}</small>
+            @enderror
           </div>
         </div>
 
@@ -87,11 +101,11 @@
               </li>
               <li class="d-flex justify-content-between">
                 <span>Ongkir</span>
-                <strong id="shipping-cost">Rp 20.000</strong>
+                <strong id="shipping-cost">Rp 0</strong>
               </li>
               <li class="d-flex justify-content-between mt-2 border-top pt-2">
                 <span>Total</span>
-                <strong id="total-cost">Rp {{ number_format($total + 20000, 0, ',', '.') }}</strong>
+                <strong id="total-cost">Rp {{ number_format($total, 0, ',', '.') }}</strong>
               </li>
             </ul>
 
@@ -100,10 +114,13 @@
               <label class="form-check-label" for="terms">
                 Saya menyetujui <a href="#">syarat & ketentuan*</a>
               </label>
+              @error('terms')
+                <small class="text-danger d-block">{{ $message }}</small>
+              @enderror
             </div>
 
             <div class="text-center mt-4">
-              <button type="submit" class="btn btn-primary btn-block">Bayar Sekarang</button>
+              <button type="submit" class="btn btn-primary btn-block w-100">Bayar Sekarang</button>
             </div>
           </div>
         </div>
@@ -115,21 +132,118 @@
 
 @push('scripts')
 <script>
-  const shippingDropdown = document.querySelector('[name="shipping_method"]');
-  const shippingCost = document.getElementById('shipping-cost');
-  const totalCost = document.getElementById('total-cost');
-  const subtotal = {{ $total }};
+  document.addEventListener('DOMContentLoaded', function() {
+    const addressItems = document.querySelectorAll('.address-item input[type="radio"]');
+    const shippingSelect = document.getElementById('shipping_method');
+    const shippingCostEl = document.getElementById('shipping-cost');
+    const totalCostEl = document.getElementById('total-cost');
+    const subtotal = {{ $total }};
+    const totalWeight = {{ $totalWeight ?? 1000 }};
+    const shippingLoading = document.querySelector('.shipping-loading');
+    const shippingContainer = document.querySelector('.shipping-container');
 
-  function updateTotal() {
-    const selected = shippingDropdown.value;
-    let cost = 20000;
-    if (selected === 'pos') cost = 25000;
-    if (selected === 'tiki') cost = 18000;
+    let selectedCityId = null;
 
-    shippingCost.innerText = 'Rp ' + cost.toLocaleString('id-ID');
-    totalCost.innerText = 'Rp ' + (subtotal + cost).toLocaleString('id-ID');
-  }
-  if (window.location.href.includes('payment_status')) {
+    function showLoading() {
+      shippingLoading.classList.remove('d-none');
+      shippingContainer.classList.add('d-none');
+    }
+
+    function hideLoading() {
+      shippingLoading.classList.add('d-none');
+      shippingContainer.classList.remove('d-none');
+    }
+
+    async function fetchShippingCost(cityId) {
+      if (!cityId) return;
+
+      selectedCityId = cityId;
+      showLoading();
+
+      try {
+        const response = await fetch('/api/cost', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+          },
+          body: JSON.stringify({
+            destination: cityId,
+            weight: totalWeight,
+            courier: 'jne,pos,tiki'
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Network response was not ok');
+        }
+
+        const data = await response.json();
+        updateShippingOptions(data);
+      } catch (error) {
+        console.error('Error fetching shipping costs:', error);
+        shippingSelect.innerHTML = '<option value="">Error: Gagal mengambil data ongkir</option>';
+      } finally {
+        hideLoading();
+        shippingSelect.disabled = false;
+      }
+    }
+
+    function updateShippingOptions(data) {
+      shippingSelect.innerHTML = '<option value="">Pilih metode pengiriman</option>';
+
+      if (!data || data.length === 0) {
+        shippingSelect.innerHTML += '<option value="" disabled>Tidak ada layanan pengiriman tersedia</option>';
+        return;
+      }
+
+      data.forEach(courier => {
+        const courierName = courier.name;
+
+        courier.costs.forEach(service => {
+          const serviceName = service.service;
+          const cost = service.cost[0].value;
+          const etd = service.cost[0].etd;
+
+          const etdText = etd.includes('HARI') ? etd : `${etd} hari`;
+          const optionText = `${courierName} ${serviceName} (${etdText}) - Rp ${cost.toLocaleString('id-ID')}`;
+
+          const optionValue = `${courier.code}:${cost}`;
+
+          const option = new Option(optionText, optionValue);
+          shippingSelect.add(option);
+        });
+      });
+    }
+
+    function updateTotal() {
+      const selectedOption = shippingSelect.options[shippingSelect.selectedIndex];
+
+      if (!selectedOption || !selectedOption.value) {
+        shippingCostEl.innerText = 'Rp 0';
+        totalCostEl.innerText = `Rp ${subtotal.toLocaleString('id-ID')}`;
+        return;
+      }
+
+      const costPart = selectedOption.value.split(':')[1];
+      const cost = parseInt(costPart, 10);
+
+      shippingCostEl.innerText = `Rp ${cost.toLocaleString('id-ID')}`;
+      totalCostEl.innerText = `Rp ${(subtotal + cost).toLocaleString('id-ID')}`;
+    }
+
+    addressItems.forEach(item => {
+      item.addEventListener('change', function() {
+        if (this.checked) {
+          const cityId = this.dataset.city;
+          fetchShippingCost(cityId);
+        }
+      });
+    });
+
+    shippingSelect.addEventListener('change', updateTotal);
+
+    if (window.location.href.includes('payment_status')) {
       const status = new URLSearchParams(window.location.search).get('payment_status');
       if (status === 'success') {
           window.location.href = "{{ route('payment.finish') }}";
@@ -138,11 +252,9 @@
       } else {
           window.location.href = "{{ route('payment.error') }}";
       }
-  }
-
-  shippingDropdown.addEventListener('change', updateTotal);
+    }
+  });
 </script>
 @endpush
-
 
 @endsection
