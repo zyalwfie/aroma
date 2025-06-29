@@ -99,11 +99,29 @@ Route::get('/payment/finish', [CheckoutController::class, 'paymentFinish'])->nam
 Route::get('/payment/unfinish', [CheckoutController::class, 'paymentUnfinish'])->name('payment.unfinish');
 Route::get('/payment/error', [CheckoutController::class, 'paymentError'])->name('payment.error');
 
-// Raja ongkir
-Route::get('/api/provinces', [RajaOngkirController::class, 'provinces']);
-Route::get('/api/cities', [RajaOngkirController::class, 'cities']);
-Route::post('/api/cost', [RajaOngkirController::class, 'cost']);
+Route::prefix('api')->group(function () {
 
+    Route::prefix('destinations')->group(function () {
+        Route::get('/search', [RajaOngkirController::class, 'searchDestination']);
+        Route::get('/{id}/detail', [RajaOngkirController::class, 'getDestinationDetail']);
+    });
 
-// AUTENTIKASI (default dari Breeze)
+    Route::post('/shipping/cost', [RajaOngkirController::class, 'cost']);
+
+    Route::get('/provinces', [RajaOngkirController::class, 'provinces']);
+    Route::get('/cities', [RajaOngkirController::class, 'cities']);
+
+});
+
+Route::middleware(['auth', 'web'])->group(function () {
+
+    Route::prefix('account/address')->group(function () {
+        Route::get('/{id}/data', [App\Http\Controllers\Frontend\AccountController::class, 'getAddressData']);
+        Route::post('/', [App\Http\Controllers\Frontend\AccountController::class, 'addAddress'])->name('account.address.add');
+        Route::put('/{id}', [App\Http\Controllers\Frontend\AccountController::class, 'updateAddress'])->name('account.address.update');
+        Route::delete('/{id}', [App\Http\Controllers\Frontend\AccountController::class, 'deleteAddress'])->name('account.address.delete');
+    });
+
+});
+
 require __DIR__.'/auth.php';

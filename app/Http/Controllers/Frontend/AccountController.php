@@ -7,10 +7,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
-use App\Models\Address;
-use App\Models\User;
 use App\Models\Order;
-use App\Models\OrderItem;
 use App\Models\Review;
 use App\Services\RajaOngkirService;
 
@@ -107,30 +104,32 @@ class AccountController extends Controller
     {
         $validated = $request->validate([
             'label' => 'required|string|max:100',
-            'province_id' => 'required|string',
-            'city_id' => 'required|string',
+            'destination_id' => 'required|string', // ID dari RajaOngkir API
+            'destination_name' => 'required|string|max:255', // Nama lengkap destinasi
             'address' => 'required|string',
             'zip' => 'nullable|string|max:10',
             'phone' => 'nullable|string|max:20',
         ]);
 
+        // Ambil detail destinasi dari RajaOngkir untuk validasi
         $rajaOngkir = app(RajaOngkirService::class);
+        $destinationDetail = $rajaOngkir->getDestinationDetail($validated['destination_id']);
 
-        $cities = $rajaOngkir->getCities($validated['province_id']);
-        $city = collect($cities)->firstWhere('city_id', $validated['city_id']);
+        if (!$destinationDetail) {
+            return back()->withErrors(['destination_id' => 'Destinasi tidak valid.']);
+        }
 
-        $provinces = $rajaOngkir->getProvinces();
-        $province = collect($provinces)->firstWhere('province_id', $validated['province_id']);
-
-        $cityName = $city ? ($city['type'] . ' ' . $city['city_name']) : '';
-        $provinceName = $province ? $province['province'] : '';
+        // Parsing nama destinasi untuk mendapatkan kota dan provinsi
+        $destinationParts = $this->parseDestinationName($validated['destination_name']);
 
         auth()->user()->addresses()->create([
             'label' => $validated['label'],
-            'province_id' => $validated['province_id'],
-            'province' => $provinceName,
-            'city_id' => $validated['city_id'],
-            'city' => $cityName,
+            'destination_id' => $validated['destination_id'], // ID untuk RajaOngkir
+            'province_id' => $destinationParts['province_id'] ?? null, // Legacy compatibility
+            'province' => $destinationParts['province'] ?? '',
+            'city_id' => $destinationParts['city_id'] ?? null, // Legacy compatibility
+            'city' => $destinationParts['city'] ?? '',
+            'destination_name' => $validated['destination_name'], // Nama lengkap dari RajaOngkir
             'address' => $validated['address'],
             'zip' => $validated['zip'] ?? null,
             'phone' => $validated['phone'] ?? null,
@@ -145,30 +144,31 @@ class AccountController extends Controller
 
         $validated = $request->validate([
             'label' => 'required|string|max:100',
-            'province_id' => 'required|string',
-            'city_id' => 'required|string',
+            'destination_id' => 'required|string',
+            'destination_name' => 'required|string|max:255',
             'address' => 'required|string',
             'zip' => 'nullable|string|max:10',
             'phone' => 'nullable|string|max:20',
         ]);
 
+        // Validasi destinasi
         $rajaOngkir = app(RajaOngkirService::class);
+        $destinationDetail = $rajaOngkir->getDestinationDetail($validated['destination_id']);
 
-        $cities = $rajaOngkir->getCities($validated['province_id']);
-        $city = collect($cities)->firstWhere('city_id', $validated['city_id']);
+        if (!$destinationDetail) {
+            return back()->withErrors(['destination_id' => 'Destinasi tidak valid.']);
+        }
 
-        $provinces = $rajaOngkir->getProvinces();
-        $province = collect($provinces)->firstWhere('province_id', $validated['province_id']);
-
-        $cityName = $city ? ($city['type'] . ' ' . $city['city_name']) : '';
-        $provinceName = $province ? $province['province'] : '';
+        $destinationParts = $this->parseDestinationName($validated['destination_name']);
 
         $address->update([
             'label' => $validated['label'],
-            'province_id' => $validated['province_id'],
-            'province' => $provinceName,
-            'city_id' => $validated['city_id'],
-            'city' => $cityName,
+            'destination_id' => $validated['destination_id'],
+            'province_id' => $destinationParts['province_id'] ?? null,
+            'province' => $destinationParts['province'] ?? '',
+            'city_id' => $destinationParts['city_id'] ?? null,
+            'city' => $destinationParts['city'] ?? '',
+            'destination_name' => $validated['destination_name'],
             'address' => $validated['address'],
             'zip' => $validated['zip'] ?? null,
             'phone' => $validated['phone'] ?? null,
@@ -189,6 +189,18 @@ class AccountController extends Controller
     {
         $address = auth()->user()->addresses()->findOrFail($id);
         return response()->json($address);
+    }
+
+    private function parseDestinationName($destinationName)
+    {
+        $parts = array_map('trim', explode(',', $destinationName));
+
+        return [
+            'city' => $parts[0] ?? '',
+            'province' => $parts[1] ?? '',
+            'city_id' => null,
+            'province_id' => null
+        ];
     }
 
     // ===================== ORDERS =====================
@@ -214,7 +226,6 @@ class AccountController extends Controller
         return view('frontend.account.history', compact('orders'));
     }
 
-
     public function markOrderAsCompleted(Order $order)
     {
         if ($order->user_id !== auth()->id()) {
@@ -233,7 +244,6 @@ class AccountController extends Controller
         return back()->with('success', 'Pesanan telah ditandai sebagai selesai.');
     }
 
-
     // ===================== REVIEWS =====================
     public function reviewForm(Order $order)
     {
@@ -243,10 +253,8 @@ class AccountController extends Controller
 
         $products = $order->orderItems()->with('product')->get();
 
-        return view('frontend.account.review-form', compact('order', 'products'));
+        return view('frontend.account.review-modal', compact('order', 'products'));
     }
-
-
 
     public function submitReview(Request $request, Order $order)
     {
@@ -265,7 +273,6 @@ class AccountController extends Controller
 
         return redirect()->route('account.orders.history')->with('success', 'Ulasan berhasil disimpan!');
     }
-
 
     public function myReviews()
     {

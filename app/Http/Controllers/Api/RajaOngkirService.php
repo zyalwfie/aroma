@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Services;
+namespace App\Http\Controllers\Api;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
@@ -14,24 +14,39 @@ class RajaOngkirService
     public function __construct()
     {
         $this->apiKey = config('services.rajaongkir.key');
-        $this->baseUrl = config('services.rajaongkir.url');
+        $this->baseUrl = config('services.rajaongkir.url', 'https://rajaongkir.komerce.id/api/v1');
         $this->origin = config('services.rajaongkir.origin_city');
     }
 
     /**
-     * Mendapatkan daftar provinsi
+     * Mencari destinasi berdasarkan kata kunci
      *
+     * @param string $search
+     * @param int $limit
+     * @param int $offset
      * @return array
      */
-    public function getProvinces()
+    public function searchDestination($search, $limit = 10, $offset = 0)
     {
-        return Cache::remember('rajaongkir_provinces', 86400, function () {
+        $cacheKey = 'rajaongkir_search_' . md5($search) . '_' . $limit . '_' . $offset;
+
+        return Cache::remember($cacheKey, 1800, function () use ($search, $limit, $offset) {
             $response = Http::withHeaders([
                 'key' => $this->apiKey
-            ])->get($this->baseUrl . '/province');
+            ])->get($this->baseUrl . '/destination/domestic-destination', [
+                'search' => $search,
+                'limit' => $limit,
+                'offset' => $offset
+            ]);
 
             if ($response->successful()) {
-                return $response->json()['rajaongkir']['results'];
+                $data = $response->json();
+
+                if (isset($data['data']) && is_array($data['data'])) {
+                    return $data['data'];
+                }
+
+                return $data['results'] ?? $data ?? [];
             }
 
             return [];
@@ -39,39 +54,33 @@ class RajaOngkirService
     }
 
     /**
-     * Mendapatkan daftar kota berdasarkan ID provinsi (opsional)
+     * Mendapatkan detail destinasi berdasarkan ID
      *
-     * @param int|null $provinceId
-     * @return array
+     * @param string $destinationId
+     * @return array|null
      */
-    public function getCities($provinceId = null)
+    public function getDestinationDetail($destinationId)
     {
-        $cacheKey = 'rajaongkir_cities' . ($provinceId ? '_' . $provinceId : '');
+        $cacheKey = 'rajaongkir_destination_' . $destinationId;
 
-        return Cache::remember($cacheKey, 86400, function () use ($provinceId) {
-            $endpoint = $this->baseUrl . '/city';
-            $params = [];
-
-            if ($provinceId) {
-                $params['province'] = $provinceId;
-            }
-
+        return Cache::remember($cacheKey, 86400, function () use ($destinationId) {
             $response = Http::withHeaders([
                 'key' => $this->apiKey
-            ])->get($endpoint, $params);
+            ])->get($this->baseUrl . '/destination/domestic-destination/' . $destinationId);
 
             if ($response->successful()) {
-                return $response->json()['rajaongkir']['results'];
+                $data = $response->json();
+                return $data['data'] ?? $data ?? null;
             }
 
-            return [];
+            return null;
         });
     }
 
     /**
      * Menghitung biaya pengiriman
      *
-     * @param int $destination ID kota tujuan
+     * @param string $destination ID destinasi tujuan
      * @param int $weight Berat dalam gram
      * @param string $courier Kode kurir (jne, pos, tiki)
      * @return array
@@ -88,9 +97,30 @@ class RajaOngkirService
         ]);
 
         if ($response->successful()) {
-            return $response->json()['rajaongkir']['results'];
+            $data = $response->json();
+            return $data['rajaongkir']['results'] ?? $data['results'] ?? [];
         }
 
+        return [];
+    }
+
+    /**
+     * Legacy method - untuk kompatibilitas mundur
+     * @deprecated Gunakan searchDestination() sebagai gantinya
+     */
+    public function getProvinces()
+    {
+        // Return empty array atau implementasi fallback
+        return [];
+    }
+
+    /**
+     * Legacy method - untuk kompatibilitas mundur
+     * @deprecated Gunakan searchDestination() sebagai gantinya
+     */
+    public function getCities($provinceId = null)
+    {
+        // Return empty array atau implementasi fallback
         return [];
     }
 }

@@ -67,8 +67,12 @@
 									<div class="d-flex flex-wrap gap-2">
 										@foreach ($user->addresses as $address)
 											<div class="d-flex mb-2 me-2">
-												<button class="btn btn-outline-dark btn-sm" onclick="editAddress({{ $address->id }})"
-													type="button">{{ $address->label }}</button>
+												<button class="btn btn-outline-dark btn-sm" onclick="editAddress({{ $address->id }})" type="button">
+													{{ $address->label }}
+													<small class="d-block text-muted">
+														{{ $address->destination_name ?? $address->city . ", " . $address->province }}
+													</small>
+												</button>
 												<form action="{{ route("account.address.delete", $address->id) }}" class="ms-1" method="POST">
 													@csrf @method("DELETE")
 													<button class="btn btn-outline-danger btn-sm" onclick="return confirm('Yakin ingin menghapus alamat ini?')"
@@ -208,6 +212,8 @@
 					@csrf
 					<input id="addressMethod" name="_method" type="hidden" value="POST">
 					<input id="address_id" name="address_id" type="hidden">
+					<input id="destination_id" name="destination_id" type="hidden">
+					<input id="destination_name" name="destination_name" type="hidden">
 
 					<div class="modal-body">
 						<div class="form-group mb-3">
@@ -217,21 +223,34 @@
 						</div>
 
 						<div class="form-group mb-3">
-							<label for="province_id">Provinsi</label>
-							<select class="form-control" id="province_id" name="province_id" required>
-								<option value="">Pilih Provinsi</option>
-								<!-- Akan diisi dari API -->
-							</select>
-							<div class="invalid-feedback">Pilih provinsi terlebih dahulu</div>
-						</div>
+							<label for="destination_search">Cari Kota/Kabupaten</label>
+							<div class="position-relative">
+								<input autocomplete="off" class="form-control" id="destination_search"
+									placeholder="Ketik nama kota/kabupaten..." type="text">
+								<div class="invalid-feedback">Pilih destinasi dari hasil pencarian</div>
 
-						<div class="form-group mb-3">
-							<label for="city_id">Kota/Kabupaten</label>
-							<select class="form-control" disabled id="city_id" name="city_id" required>
-								<option value="">Pilih Kota/Kabupaten</option>
-								<!-- Akan diisi dari API -->
-							</select>
-							<div class="invalid-feedback">Pilih kota/kabupaten</div>
+								{{-- Loading indicator --}}
+								<div class="position-absolute" id="search_loading"
+									style="right: 10px; top: 50%; transform: translateY(-50%); display: none;">
+									<div class="spinner-border spinner-border-sm text-secondary" role="status">
+										<span class="sr-only">Loading...</span>
+									</div>
+								</div>
+							</div>
+
+							{{-- Search results dropdown --}}
+							<div class="list-group position-absolute w-100" id="destination_results"
+								style="z-index: 1000; max-height: 200px; overflow-y: auto; display: none;"></div>
+
+							{{-- Selected destination display --}}
+							<div class="mt-2" id="selected_destination" style="display: none;">
+								<small class="text-muted">Destinasi dipilih:</small>
+								<div class="alert alert-info py-2 mb-0">
+									<strong id="selected_destination_name"></strong>
+									<button class="btn btn-sm btn-outline-secondary float-right" onclick="clearDestinationSelection()"
+										type="button">Ubah</button>
+								</div>
+							</div>
 						</div>
 
 						<div class="form-group mb-3">
@@ -253,7 +272,7 @@
 
 					<div class="modal-footer">
 						<button class="btn btn-secondary" data-dismiss="modal" type="button">Batal</button>
-						<button class="btn btn-primary" type="submit">Simpan</button>
+						<button class="btn btn-primary" disabled id="submit_address" type="submit">Simpan</button>
 					</div>
 				</form>
 			</div>
@@ -263,93 +282,170 @@
 	@push("scripts")
 		<script>
 			document.addEventListener('DOMContentLoaded', function() {
-				const provinceSelect = document.getElementById('province_id');
-				const citySelect = document.getElementById('city_id');
+				const destinationSearch = document.getElementById('destination_search');
+				const destinationResults = document.getElementById('destination_results');
+				const selectedDestination = document.getElementById('selected_destination');
+				const selectedDestinationName = document.getElementById('selected_destination_name');
+				const searchLoading = document.getElementById('search_loading');
+				const submitButton = document.getElementById('submit_address');
 				const addressForm = document.getElementById('addressForm');
 				const addressMethod = document.getElementById('addressMethod');
 				const addressModalLabel = document.getElementById('addressModalLabel');
 
-				async function fetchProvinces() {
-					try {
-						provinceSelect.innerHTML = '<option value="">Memuat provinsi...</option>';
-						provinceSelect.disabled = true;
+				let searchTimeout;
+				let selectedDestinationData = null;
 
-						const response = await fetch('/api/provinces');
-						if (!response.ok) {
-							throw new Error('Gagal mengambil data provinsi');
-						}
-
-						const provinces = await response.json();
-
-						provinceSelect.innerHTML = '<option value="">Pilih Provinsi</option>';
-						provinces.forEach(province => {
-							const option = document.createElement('option');
-							option.value = province.province_id;
-							option.textContent = province.province;
-							provinceSelect.appendChild(option);
-						});
-
-						provinceSelect.disabled = false;
-					} catch (error) {
-						console.error('Error fetching provinces:', error);
-						provinceSelect.innerHTML = '<option value="">Error: Gagal memuat provinsi</option>';
-						provinceSelect.disabled = false;
-					}
-				}
-
-				async function fetchCities(provinceId) {
-					if (!provinceId) {
-						citySelect.innerHTML = '<option value="">Pilih Kota/Kabupaten</option>';
-						citySelect.disabled = true;
+				async function searchDestinations(query) {
+					if (query.length < 3) {
+						destinationResults.style.display = 'none';
 						return;
 					}
 
 					try {
-						citySelect.innerHTML = '<option value="">Memuat kota...</option>';
-						citySelect.disabled = true;
+						searchLoading.style.display = 'block';
 
-						const response = await fetch(`/api/cities?province_id=${provinceId}`);
-						if (!response.ok) {
-							throw new Error('Gagal mengambil data kota');
+						const response = await fetch(
+							`/api/destinations/search?search=${encodeURIComponent(query)}&limit=0&offset=0`);
+						const data = await response.json();
+
+						searchLoading.style.display = 'none';
+
+						if (data.success && data.data.length > 0) {
+							displaySearchResults(data.data);
+						} else {
+							displayNoResults();
 						}
-
-						const cities = await response.json();
-
-						citySelect.innerHTML = '<option value="">Pilih Kota/Kabupaten</option>';
-						cities.forEach(city => {
-							const option = document.createElement('option');
-							option.value = city.city_id;
-							option.textContent = city.type + ' ' + city.city_name;
-							citySelect.appendChild(option);
-						});
-
-						citySelect.disabled = false;
 					} catch (error) {
-						console.error('Error fetching cities:', error);
-						citySelect.innerHTML = '<option value="">Error: Gagal memuat kota</option>';
-						citySelect.disabled = false;
+						console.error('Error searching destinations:', error);
+						searchLoading.style.display = 'none';
+						displayErrorResults();
 					}
 				}
 
-				provinceSelect.addEventListener('change', function() {
-					fetchCities(this.value);
+				function displaySearchResults(destinations) {
+					destinationResults.innerHTML = '';
+
+					destinations.forEach(destination => {
+						const item = document.createElement('a');
+						item.className = 'list-group-item list-group-item-action';
+						item.href = '#';
+
+						const displayName = destination.destination_name ||
+							`${destination.type || ''} ${destination.city_name || destination.name || ''}${destination.province ? ', ' + destination.province : ''}`;
+
+						item.innerHTML = `
+							<div class="d-flex w-100 justify-content-between">
+								<h6 class="mb-1">${displayName}</h6>
+								<small class="text-muted">${destination.province || ''}</small>
+							</div>
+							${destination.postal_code ? `<small class="text-muted">Kode Pos: ${destination.postal_code}</small>` : ''}
+						`;
+
+						item.addEventListener('click', function(e) {
+							e.preventDefault();
+							selectDestination({
+								id: destination.destination_id || destination.city_id ||
+									destination.id,
+								name: displayName,
+								data: destination
+							});
+						});
+
+						destinationResults.appendChild(item);
+					});
+
+					destinationResults.style.display = 'block';
+				}
+
+				function displayNoResults() {
+					destinationResults.innerHTML =
+						'<div class="list-group-item text-muted">Tidak ada hasil ditemukan</div>';
+					destinationResults.style.display = 'block';
+				}
+
+				function displayErrorResults() {
+					destinationResults.innerHTML =
+						'<div class="list-group-item text-danger">Gagal mencari destinasi. Silakan coba lagi.</div>';
+					destinationResults.style.display = 'block';
+				}
+
+				function selectDestination(destination) {
+					selectedDestinationData = destination;
+
+					destinationSearch.value = destination.name;
+					selectedDestinationName.textContent = destination.name;
+					selectedDestination.style.display = 'block';
+					destinationResults.style.display = 'none';
+
+					document.getElementById('destination_id').value = destination.id;
+					document.getElementById('destination_name').value = destination.name;
+
+					submitButton.disabled = false;
+
+					destinationSearch.classList.remove('is-invalid');
+				}
+
+				window.clearDestinationSelection = function() {
+					selectedDestinationData = null;
+					destinationSearch.value = '';
+					selectedDestination.style.display = 'none';
+					document.getElementById('destination_id').value = '';
+					document.getElementById('destination_name').value = '';
+					submitButton.disabled = true;
+					destinationSearch.focus();
+				};
+
+				destinationSearch.addEventListener('input', function() {
+					clearTimeout(searchTimeout);
+					const query = this.value.trim();
+
+					if (selectedDestinationData && this.value === selectedDestinationData.name) {
+						return;
+					}
+
+					if (selectedDestinationData) {
+						clearDestinationSelection();
+					}
+
+					searchTimeout = setTimeout(() => {
+						searchDestinations(query);
+					}, 300);
+				});
+
+				document.addEventListener('click', function(e) {
+					if (!destinationSearch.contains(e.target) && !destinationResults.contains(e.target)) {
+						destinationResults.style.display = 'none';
+					}
+				});
+
+				$('#addressModal').on('shown.bs.modal', function() {
+					destinationSearch.focus();
+				});
+
+				addressForm.addEventListener('submit', function(e) {
+					if (!selectedDestinationData) {
+						e.preventDefault();
+						destinationSearch.classList.add('is-invalid');
+						alert('Silakan pilih destinasi dari hasil pencarian');
+						return false;
+					}
 				});
 
 				window.addNewAddress = function() {
 					addressForm.reset();
+					clearDestinationSelection();
 
 					addressForm.action = "{{ route("account.address.add") }}";
 					addressMethod.value = 'POST';
 
 					addressModalLabel.textContent = 'Tambah Alamat Baru';
 
-					fetchProvinces();
-
 					$('#addressModal').modal('show');
 				};
 
 				window.editAddress = function(addressId) {
 					addressForm.reset();
+					clearDestinationSelection();
 
 					addressForm.action = `{{ url("account/address") }}/${addressId}`;
 					addressMethod.value = 'PUT';
@@ -365,17 +461,13 @@
 							document.getElementById('zip').value = data.zip || '';
 							document.getElementById('phone').value = data.phone || '';
 
-							fetchProvinces().then(() => {
-								if (data.province_id) {
-									provinceSelect.value = data.province_id;
-
-									fetchCities(data.province_id).then(() => {
-										if (data.city_id) {
-											citySelect.value = data.city_id;
-										}
-									});
-								}
-							});
+							if (data.destination_id && data.destination_name) {
+								selectDestination({
+									id: data.destination_id,
+									name: data.destination_name,
+									data: data
+								});
+							}
 						})
 						.catch(error => {
 							console.error('Error fetching address data:', error);
