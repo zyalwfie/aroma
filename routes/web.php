@@ -23,7 +23,7 @@ Route::get('/register', [RegisteredUserController::class, 'create'])
 
 Route::post('/register', [RegisteredUserController::class, 'store'])
             ->middleware('guest');
-// Group untuk semua akses user
+
 Route::middleware('auth')->prefix('account')->name('account.')->group(function () {
     // Dashboard
     Route::get('/', [AccountController::class, 'index'])->name('index');
@@ -49,20 +49,6 @@ Route::middleware('auth')->prefix('account')->name('account.')->group(function (
     Route::get('/review/{order}', [AccountController::class, 'reviewForm'])->name('reviews.form');
     Route::post('/review/{order}', [AccountController::class, 'submitReview'])->name('reviews.submit');
     Route::get('/reviews', [AccountController::class, 'myReviews'])->name('reviews.list');
-});
-
-
-Route::middleware('auth')->prefix('account')->name('account.')->group(function () {
-    Route::get('/', [AccountController::class, 'index'])->name('index');
-    Route::post('/update-profile', [AccountController::class, 'updateProfile'])->name('update');
-    Route::post('/update-password', [AccountController::class, 'updatePassword'])->name('password');
-    Route::post('/upload-picture', [AccountController::class, 'uploadPicture'])->name('picture');
-    Route::delete('/delete-picture', [AccountController::class, 'deletePicture'])->name('delete-picture');
-
-    // Alamat
-    Route::post('/address', [AccountController::class, 'addAddress'])->name('address.add');
-    Route::put('/address/{id}', [AccountController::class, 'updateAddress'])->name('address.update');
-    Route::delete('/address/{id}', [AccountController::class, 'deleteAddress'])->name('address.delete');
 });
 
 
@@ -106,22 +92,22 @@ Route::prefix('api')->group(function () {
         Route::get('/{id}/detail', [RajaOngkirController::class, 'getDestinationDetail']);
     });
 
-    Route::post('/shipping/cost', [RajaOngkirController::class, 'cost']);
+    Route::post('/cost', [RajaOngkirController::class, 'cost']);
 
     Route::get('/provinces', [RajaOngkirController::class, 'provinces']);
     Route::get('/cities', [RajaOngkirController::class, 'cities']);
 
 });
 
-Route::middleware(['auth', 'web'])->group(function () {
+// Route::middleware(['auth'])->group(function () {
 
-    Route::prefix('account/address')->group(function () {
-        Route::get('/{id}/data', [App\Http\Controllers\Frontend\AccountController::class, 'getAddressData']);
-        Route::post('/', [App\Http\Controllers\Frontend\AccountController::class, 'addAddress'])->name('account.address.add');
-        Route::put('/{id}', [App\Http\Controllers\Frontend\AccountController::class, 'updateAddress'])->name('account.address.update');
-        Route::delete('/{id}', [App\Http\Controllers\Frontend\AccountController::class, 'deleteAddress'])->name('account.address.delete');
-    });
+//     Route::prefix('account/address')->group(function () {
+//         Route::get('/{id}/data', [App\Http\Controllers\Frontend\AccountController::class, 'getAddressData']);
+//         Route::post('/', [App\Http\Controllers\Frontend\AccountController::class, 'addAddress'])->name('account.address.add');
+//         Route::put('/{id}', [App\Http\Controllers\Frontend\AccountController::class, 'updateAddress'])->name('account.address.update');
+//         Route::delete('/{id}', [App\Http\Controllers\Frontend\AccountController::class, 'deleteAddress'])->name('account.address.delete');
+//     });
 
-});
+// });
 
 require __DIR__.'/auth.php';

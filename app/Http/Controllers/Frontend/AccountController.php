@@ -42,7 +42,7 @@ class AccountController extends Controller
 
         $user->email = $request->email;
         $user->phone = $request->phone;
-        $user->save();
+        // $user->save();
 
         return back()->with('success', 'Profil berhasil diperbarui.');
     }
@@ -102,6 +102,8 @@ class AccountController extends Controller
     // ===================== ADDRESS =====================
     public function addAddress(Request $request)
     {
+        // dd($request->all());
+
         $validated = $request->validate([
             'label' => 'required|string|max:100',
             'destination_id' => 'required|string', // ID dari RajaOngkir API
@@ -111,25 +113,25 @@ class AccountController extends Controller
             'phone' => 'nullable|string|max:20',
         ]);
 
-        // Ambil detail destinasi dari RajaOngkir untuk validasi
-        $rajaOngkir = app(RajaOngkirService::class);
-        $destinationDetail = $rajaOngkir->getDestinationDetail($validated['destination_id']);
+        dd($validated, $request->all());
 
-        if (!$destinationDetail) {
-            return back()->withErrors(['destination_id' => 'Destinasi tidak valid.']);
-        }
+        // Ambil detail destinasi dari RajaOngkir untuk validasi
+        // $rajaOngkir = app(RajaOngkirService::class);
+        // $destinationDetail = $rajaOngkir->getDestinationDetail($validated['destination_id']);
+
+        // if (!$destinationDetail) {
+        //     return back()->withErrors(['destination_id' => 'Destinasi tidak valid.']);
+        // }
 
         // Parsing nama destinasi untuk mendapatkan kota dan provinsi
-        $destinationParts = $this->parseDestinationName($validated['destination_name']);
+        // $destinationParts = $this->parseDestinationName($validated['destination_name']);
 
         auth()->user()->addresses()->create([
-            'label' => $validated['label'],
             'destination_id' => $validated['destination_id'], // ID untuk RajaOngkir
-            'province_id' => $destinationParts['province_id'] ?? null, // Legacy compatibility
-            'province' => $destinationParts['province'] ?? '',
-            'city_id' => $destinationParts['city_id'] ?? null, // Legacy compatibility
-            'city' => $destinationParts['city'] ?? '',
             'destination_name' => $validated['destination_name'], // Nama lengkap dari RajaOngkir
+            'city_name' => $validated['city_id'] ?? null, // Legacy compatibility
+            'province_name' => $request['province_name'] ?? '',
+            'label' => $validated['label'],
             'address' => $validated['address'],
             'zip' => $validated['zip'] ?? null,
             'phone' => $validated['phone'] ?? null,

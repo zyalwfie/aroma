@@ -6,6 +6,14 @@
 	<section class="section-margin--small">
 		<div class="container">
 			<div class="row">
+				<div class="col mb-3">
+					<h3>Akun Saya</h3>
+					<form action="{{ route("account.address.add") }}" method="POST">
+						@csrf
+						<input class="form-control mb-3" name="query" placeholder="Cari alamat..." type="text">
+						<button class="btn btn-primary" type="submit">Cari</button>
+					</form>
+				</div>
 				<div class="col-lg-12">
 
 					{{-- INFORMASI PROFIL --}}
@@ -13,7 +21,7 @@
 						<div class="row">
 							<div class="col-md-3 text-center">
 								<img alt="Profile Picture" class="rounded-circle mb-3" height="100"
-									src="{{ auth()->user()->profile_picture ? asset("storage/profile/" . auth()->user()->profile_picture) : "https://via.placeholder.com/100" }}"
+									src="{{ auth()->user()->profile_picture ? Storage::url(auth()->user()->profile_picture) : "https://via.placeholder.com/100" }}"
 									width="100">
 
 								{{-- Upload & Delete --}}
@@ -82,6 +90,9 @@
 										@endforeach
 									</div>
 									<button class="btn btn-outline-dark btn-sm mt-2" onclick="addNewAddress()" type="button">Tambah Alamat</button>
+									@if (session("success"))
+										<p>{{ session("success") }}</p>
+									@endif
 								</div>
 							</div>
 						</div>
@@ -169,6 +180,7 @@
 							<button class="btn btn-danger" type="submit">Log out</button>
 						</form>
 					</div>
+
 				</div>
 			</div>
 		</div>
@@ -208,12 +220,11 @@
 						<span aria-hidden="true">&times;</span>
 					</button>
 				</div>
-				<form action="{{ route("account.address.add") }}" id="addressForm" method="POST">
+				<form action="{{ route('account.address.add') }}" id="addressForm" method="POST">
 					@csrf
 					<input id="addressMethod" name="_method" type="hidden" value="POST">
-					<input id="address_id" name="address_id" type="hidden">
-					<input id="destination_id" name="destination_id" type="hidden">
 					<input id="destination_name" name="destination_name" type="hidden">
+					<input id="province_name" name="province_name" type="hidden">
 
 					<div class="modal-body">
 						<div class="form-group mb-3">
@@ -305,12 +316,32 @@
 						searchLoading.style.display = 'block';
 
 						const response = await fetch(
-							`/api/destinations/search?search=${encodeURIComponent(query)}&limit=0&offset=0`);
+							`/api/destinations/search?search=${encodeURIComponent(query)}&limit=10&offset=0`, {
+								method: 'GET',
+								headers: {
+									'Accept': 'application/json',
+									'Content-Type': 'application/json',
+									'X-Requested-With': 'XMLHttpRequest'
+								}
+							}
+						);
+
+						// Check if response is OK
+						if (!response.ok) {
+							throw new Error(`HTTP error! status: ${response.status}`);
+						}
+
+						// Check content type
+						const contentType = response.headers.get("content-type");
+						if (!contentType || !contentType.includes("application/json")) {
+							throw new Error("Response is not JSON");
+						}
+
 						const data = await response.json();
 
 						searchLoading.style.display = 'none';
 
-						if (data.success && data.data.length > 0) {
+						if (data.success && data.data && data.data.length > 0) {
 							displaySearchResults(data.data);
 						} else {
 							displayNoResults();
@@ -318,7 +349,12 @@
 					} catch (error) {
 						console.error('Error searching destinations:', error);
 						searchLoading.style.display = 'none';
-						displayErrorResults();
+
+						if (error.message.includes('not JSON')) {
+							displayErrorResults('Server error. Silakan coba lagi.');
+						} else {
+							displayErrorResults();
+						}
 					}
 				}
 
@@ -330,22 +366,36 @@
 						item.className = 'list-group-item list-group-item-action';
 						item.href = '#';
 
-						const displayName = destination.destination_name ||
-							`${destination.type || ''} ${destination.city_name || destination.name || ''}${destination.province ? ', ' + destination.province : ''}`;
+						// Handle different possible response formats from RajaOngkir
+						const destinationId = destination.destination_id || destination.city_id || destination.id;
+						const cityName = destination.city_name || destination.name || destination.city || '';
+						const provinceName = destination.province_name || destination.province || '';
+						const type = destination.type || '';
+						const postalCode = destination.postal_code || destination.zip || '';
+
+						// Build display name
+						let displayName = '';
+						if (destination.subdistrict_name) {
+							displayName = destination.subdistrict_name;
+						} else {
+							displayName = type ? `${type} ${cityName}` : cityName;
+							if (provinceName) {
+								displayName += `, ${provinceName}`;
+							}
+						}
 
 						item.innerHTML = `
-							<div class="d-flex w-100 justify-content-between">
-								<h6 class="mb-1">${displayName}</h6>
-								<small class="text-muted">${destination.province || ''}</small>
-							</div>
-							${destination.postal_code ? `<small class="text-muted">Kode Pos: ${destination.postal_code}</small>` : ''}
-						`;
+                <div class="d-flex w-100 justify-content-between">
+                    <h6 class="mb-1">${displayName}</h6>
+                    <small class="text-muted">${provinceName}</small>
+                </div>
+                ${postalCode ? `<small class="text-muted">Kode Pos: ${postalCode}</small>` : ''}
+            `;
 
 						item.addEventListener('click', function(e) {
 							e.preventDefault();
 							selectDestination({
-								id: destination.destination_id || destination.city_id ||
-									destination.id,
+								id: destinationId,
 								name: displayName,
 								data: destination
 							});
@@ -363,9 +413,9 @@
 					destinationResults.style.display = 'block';
 				}
 
-				function displayErrorResults() {
+				function displayErrorResults(message = 'Gagal mencari destinasi. Silakan coba lagi.') {
 					destinationResults.innerHTML =
-						'<div class="list-group-item text-danger">Gagal mencari destinasi. Silakan coba lagi.</div>';
+						`<div class="list-group-item text-danger">${message}</div>`;
 					destinationResults.style.display = 'block';
 				}
 
@@ -377,8 +427,8 @@
 					selectedDestination.style.display = 'block';
 					destinationResults.style.display = 'none';
 
-					document.getElementById('destination_id').value = destination.id;
-					document.getElementById('destination_name').value = destination.name;
+					document.getElementById('province_name').value = destination.province_name;
+					document.getElementById('destination_name').value = destination.city_name;
 
 					submitButton.disabled = false;
 
@@ -389,7 +439,7 @@
 					selectedDestinationData = null;
 					destinationSearch.value = '';
 					selectedDestination.style.display = 'none';
-					document.getElementById('destination_id').value = '';
+					document.getElementById('province_name').value = '';
 					document.getElementById('destination_name').value = '';
 					submitButton.disabled = true;
 					destinationSearch.focus();
@@ -412,16 +462,19 @@
 					}, 300);
 				});
 
+				// Hide results when clicking outside
 				document.addEventListener('click', function(e) {
 					if (!destinationSearch.contains(e.target) && !destinationResults.contains(e.target)) {
 						destinationResults.style.display = 'none';
 					}
 				});
 
+				// Focus on search input when modal opens
 				$('#addressModal').on('shown.bs.modal', function() {
 					destinationSearch.focus();
 				});
 
+				// Validate form submission
 				addressForm.addEventListener('submit', function(e) {
 					if (!selectedDestinationData) {
 						e.preventDefault();
@@ -431,30 +484,39 @@
 					}
 				});
 
+				// Function to add new address
 				window.addNewAddress = function() {
 					addressForm.reset();
 					clearDestinationSelection();
-
-					addressForm.action = "{{ route("account.address.add") }}";
-					addressMethod.value = 'POST';
 
 					addressModalLabel.textContent = 'Tambah Alamat Baru';
 
 					$('#addressModal').modal('show');
 				};
 
+				// Function to edit existing address
 				window.editAddress = function(addressId) {
 					addressForm.reset();
 					clearDestinationSelection();
 
-					addressForm.action = `{{ url("account/address") }}/${addressId}`;
+					addressForm.action = `/account/address/${addressId}`;
 					addressMethod.value = 'PUT';
 					document.getElementById('address_id').value = addressId;
 
 					addressModalLabel.textContent = 'Edit Alamat';
 
-					fetch(`/account/address/${addressId}/data`)
-						.then(response => response.json())
+					fetch(`/account/address/${addressId}/data`, {
+							headers: {
+								'Accept': 'application/json',
+								'X-Requested-With': 'XMLHttpRequest'
+							}
+						})
+						.then(response => {
+							if (!response.ok) {
+								throw new Error(`HTTP error! status: ${response.status}`);
+							}
+							return response.json();
+						})
 						.then(data => {
 							document.getElementById('label').value = data.label;
 							document.getElementById('address').value = data.address;

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 class RajaOngkirService
 {
@@ -26,30 +27,59 @@ class RajaOngkirService
      * @param int $offset
      * @return array
      */
-    public function searchDestination($search, $limit = 10, $offset = 0)
+    public function searchDestination(string $search, int $limit = 0, int $offset = 0): array
     {
         $cacheKey = 'rajaongkir_search_' . md5($search) . '_' . $limit . '_' . $offset;
 
         return Cache::remember($cacheKey, 1800, function () use ($search, $limit, $offset) {
-            $response = Http::withHeaders([
-                'key' => $this->apiKey
-            ])->get($this->baseUrl . '/destination/domestic-destination', [
-                'search' => $search,
-                'limit' => $limit,
-                'offset' => $offset
-            ]);
+            try {
+                Log::info('RajaOngkir API Request', [
+                    'url' => $this->baseUrl . '/destination/domestic-destination',
+                    'params' => [
+                        'search' => $search,
+                        'limit' => $limit,
+                        'offset' => $offset
+                    ]
+                ]);
 
-            if ($response->successful()) {
-                $data = $response->json();
+                $response = Http::withHeaders([
+                    'key' => $this->apiKey
+                ])->get($this->baseUrl . '/destination/domestic-destination', [
+                    'search' => $search,
+                    'limit' => $limit,
+                    'offset' => $offset
+                ]);
 
-                if (isset($data['data']) && is_array($data['data'])) {
-                    return $data['data'];
+                if ($response->successful()) {
+                    $data = $response->json();
+
+                    Log::info('RajaOngkir API Response', [
+                        'status' => $response->status(),
+                        'has_data' => isset($data['data']),
+                        'data_count' => isset($data['data']) ? count($data['data']) : 0
+                    ]);
+
+                    if (isset($data['data']) && is_array($data['data'])) {
+                        return $data['data'];
+                    }
+
+                    return $data['results'] ?? $data ?? [];
                 }
 
-                return $data['results'] ?? $data ?? [];
-            }
+                Log::error('RajaOngkir API Error', [
+                    'status' => $response->status(),
+                    'body' => $response->body()
+                ]);
 
-            return [];
+                return [];
+            } catch (\Exception $e) {
+                Log::error('RajaOngkir searchDestination Exception', [
+                    'message' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString()
+                ]);
+
+                return [];
+            }
         });
     }
 
@@ -59,21 +89,36 @@ class RajaOngkirService
      * @param string $destinationId
      * @return array|null
      */
-    public function getDestinationDetail($destinationId)
+    public function getDestinationDetail(string $destinationId): ?array
     {
         $cacheKey = 'rajaongkir_destination_' . $destinationId;
 
         return Cache::remember($cacheKey, 86400, function () use ($destinationId) {
-            $response = Http::withHeaders([
-                'key' => $this->apiKey
-            ])->get($this->baseUrl . '/destination/domestic-destination/' . $destinationId);
+            try {
+                $response = Http::withHeaders([
+                    'key' => $this->apiKey
+                ])->get($this->baseUrl . '/destination/domestic-destination/' . $destinationId);
 
-            if ($response->successful()) {
-                $data = $response->json();
-                return $data['data'] ?? $data ?? null;
+                if ($response->successful()) {
+                    $data = $response->json();
+                    return $data['data'] ?? $data ?? null;
+                }
+
+                Log::error('RajaOngkir getDestinationDetail Error', [
+                    'destination_id' => $destinationId,
+                    'status' => $response->status(),
+                    'body' => $response->body()
+                ]);
+
+                return null;
+            } catch (\Exception $e) {
+                Log::error('RajaOngkir getDestinationDetail Exception', [
+                    'destination_id' => $destinationId,
+                    'message' => $e->getMessage()
+                ]);
+
+                return null;
             }
-
-            return null;
         });
     }
 
@@ -85,30 +130,46 @@ class RajaOngkirService
      * @param string $courier Kode kurir (jne, pos, tiki)
      * @return array
      */
-    public function getCost($destination, $weight, $courier)
+    public function getCost(string $destination, int $weight, string $courier): array
     {
-        $response = Http::withHeaders([
-            'key' => $this->apiKey
-        ])->post($this->baseUrl . '/cost', [
-            'origin' => $this->origin,
-            'destination' => $destination,
-            'weight' => $weight,
-            'courier' => $courier
-        ]);
+        try {
+            $response = Http::withHeaders([
+                'key' => $this->apiKey
+            ])->post($this->baseUrl . '/cost', [
+                'origin' => $this->origin,
+                'destination' => $destination,
+                'weight' => $weight,
+                'courier' => $courier
+            ]);
 
-        if ($response->successful()) {
-            $data = $response->json();
-            return $data['rajaongkir']['results'] ?? $data['results'] ?? [];
+            if ($response->successful()) {
+                $data = $response->json();
+                return $data['rajaongkir']['results'] ?? $data['results'] ?? [];
+            }
+
+            Log::error('RajaOngkir getCost Error', [
+                'destination' => $destination,
+                'weight' => $weight,
+                'courier' => $courier,
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+
+            return [];
+        } catch (\Exception $e) {
+            Log::error('RajaOngkir getCost Exception', [
+                'message' => $e->getMessage()
+            ]);
+
+            return [];
         }
-
-        return [];
     }
 
     /**
      * Legacy method - untuk kompatibilitas mundur
      * @deprecated Gunakan searchDestination() sebagai gantinya
      */
-    public function getProvinces()
+    public function getProvinces(): array
     {
         // Return empty array atau implementasi fallback
         return [];
@@ -118,7 +179,7 @@ class RajaOngkirService
      * Legacy method - untuk kompatibilitas mundur
      * @deprecated Gunakan searchDestination() sebagai gantinya
      */
-    public function getCities($provinceId = null)
+    public function getCities(?string $provinceId = null): array
     {
         // Return empty array atau implementasi fallback
         return [];
