@@ -106,14 +106,14 @@ class AccountController extends Controller
 
         $validated = $request->validate([
             'label' => 'required|string|max:100',
-            'destination_id' => 'required|string', // ID dari RajaOngkir API
-            'destination_name' => 'required|string|max:255', // Nama lengkap destinasi
+            'destination_id' => 'required|string',
+            'destination_name' => 'required|string|max:255',
             'address' => 'required|string',
             'zip' => 'nullable|string|max:10',
             'phone' => 'nullable|string|max:20',
         ]);
 
-        dd($validated, $request->all());
+        // dd($validated['destination_name'], $request->city_name);
 
         // Ambil detail destinasi dari RajaOngkir untuk validasi
         // $rajaOngkir = app(RajaOngkirService::class);
@@ -129,8 +129,8 @@ class AccountController extends Controller
         auth()->user()->addresses()->create([
             'destination_id' => $validated['destination_id'], // ID untuk RajaOngkir
             'destination_name' => $validated['destination_name'], // Nama lengkap dari RajaOngkir
-            'city_name' => $validated['city_id'] ?? null, // Legacy compatibility
-            'province_name' => $request['province_name'] ?? '',
+            'city_name' => $request->city_name ?? '', // Legacy compatibility
+            'province_name' => $request->province_name ?? '',
             'label' => $validated['label'],
             'address' => $validated['address'],
             'zip' => $validated['zip'] ?? null,

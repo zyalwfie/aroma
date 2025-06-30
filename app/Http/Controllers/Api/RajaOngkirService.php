@@ -135,7 +135,7 @@ class RajaOngkirService
         try {
             $response = Http::withHeaders([
                 'key' => $this->apiKey
-            ])->post($this->baseUrl . '/cost', [
+            ])->post($this->baseUrl . '/calculate/domestic-cost', [
                 'origin' => $this->origin,
                 'destination' => $destination,
                 'weight' => $weight,

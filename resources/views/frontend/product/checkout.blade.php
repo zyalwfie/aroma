@@ -143,7 +143,7 @@
 				const shippingCostEl = document.getElementById('shipping-cost');
 				const totalCostEl = document.getElementById('total-cost');
 				const subtotal = {{ $total }};
-				const totalWeight = {{ $totalWeight ?? 1000 }};
+				const totalWeight = 1000;
 				const shippingLoading = document.querySelector('.shipping-loading');
 				const shippingContainer = document.querySelector('.shipping-container');
                 const address = document.querySelectorAll('input[type="radio"][name="address_id"]');
@@ -179,14 +179,13 @@
 							headers: {
 								'Content-Type': 'application/json',
 								'Accept': 'application/json',
-								'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute(
-									'content'),
+								'X-CSRF-TOKEN': document.querySelector('input[name="_token"]').value,
 								'X-Requested-With': 'XMLHttpRequest'
 							},
 							body: JSON.stringify({
 								destination: destinationId,
 								weight: totalWeight,
-								courier: 'jne,pos,tiki'
+								courier: 'jne,jnt,sicepat'
 							})
 						});
 

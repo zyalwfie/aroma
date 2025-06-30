@@ -8,11 +8,6 @@
 			<div class="row">
 				<div class="col mb-3">
 					<h3>Akun Saya</h3>
-					<form action="{{ route("account.address.add") }}" method="POST">
-						@csrf
-						<input class="form-control mb-3" name="query" placeholder="Cari alamat..." type="text">
-						<button class="btn btn-primary" type="submit">Cari</button>
-					</form>
 				</div>
 				<div class="col-lg-12">
 
@@ -75,11 +70,8 @@
 									<div class="d-flex flex-wrap gap-2">
 										@foreach ($user->addresses as $address)
 											<div class="d-flex mb-2 me-2">
-												<button class="btn btn-outline-dark btn-sm" onclick="editAddress({{ $address->id }})" type="button">
+												<button class="mr-1 btn btn-outline-dark btn-sm" onclick="editAddress({{ $address->id }})" type="button">
 													{{ $address->label }}
-													<small class="d-block text-muted">
-														{{ $address->destination_name ?? $address->city . ", " . $address->province }}
-													</small>
 												</button>
 												<form action="{{ route("account.address.delete", $address->id) }}" class="ms-1" method="POST">
 													@csrf @method("DELETE")
@@ -220,11 +212,12 @@
 						<span aria-hidden="true">&times;</span>
 					</button>
 				</div>
-				<form action="{{ route('account.address.add') }}" id="addressForm" method="POST">
+				<form action="{{ route("account.address.add") }}" id="addressForm" method="POST">
 					@csrf
 					<input id="addressMethod" name="_method" type="hidden" value="POST">
 					<input id="destination_name" name="destination_name" type="hidden">
 					<input id="province_name" name="province_name" type="hidden">
+					<input id="city_name" name="city_name" type="hidden">
 
 					<div class="modal-body">
 						<div class="form-group mb-3">
@@ -326,19 +319,16 @@
 							}
 						);
 
-						// Check if response is OK
 						if (!response.ok) {
 							throw new Error(`HTTP error! status: ${response.status}`);
 						}
 
-						// Check content type
 						const contentType = response.headers.get("content-type");
 						if (!contentType || !contentType.includes("application/json")) {
 							throw new Error("Response is not JSON");
 						}
 
 						const data = await response.json();
-
 						searchLoading.style.display = 'none';
 
 						if (data.success && data.data && data.data.length > 0) {
@@ -397,6 +387,8 @@
 							selectDestination({
 								id: destinationId,
 								name: displayName,
+								cityName: cityName,
+								provinceName: provinceName,
 								data: destination
 							});
 						});
@@ -422,25 +414,53 @@
 				function selectDestination(destination) {
 					selectedDestinationData = destination;
 
+					// Update UI
 					destinationSearch.value = destination.name;
 					selectedDestinationName.textContent = destination.name;
 					selectedDestination.style.display = 'block';
 					destinationResults.style.display = 'none';
 
-					document.getElementById('province_name').value = destination.province_name;
-					document.getElementById('destination_name').value = destination.city_name;
+					// Create hidden input for destination_id if not exists
+					let destinationIdInput = document.getElementById('destination_id');
+					if (!destinationIdInput) {
+						destinationIdInput = document.createElement('input');
+						destinationIdInput.type = 'hidden';
+						destinationIdInput.id = 'destination_id';
+						destinationIdInput.name = 'destination_id';
+						addressForm.appendChild(destinationIdInput);
+					}
 
+					// Set the values
+					destinationIdInput.value = destination.id;
+					document.getElementById('destination_name').value = destination.name;
+					document.getElementById('province_name').value = destination.provinceName || '';
+					document.getElementById('city_name').value = destination.cityName || '';
+
+					// Enable submit button
 					submitButton.disabled = false;
-
 					destinationSearch.classList.remove('is-invalid');
+
+					console.log('Selected destination:', {
+						id: destination.id,
+						name: destination.name,
+						cityName: destination.cityName,
+						provinceName: destination.provinceName
+					});
 				}
 
 				window.clearDestinationSelection = function() {
 					selectedDestinationData = null;
 					destinationSearch.value = '';
 					selectedDestination.style.display = 'none';
-					document.getElementById('province_name').value = '';
+
+					// Clear hidden inputs
+					const destinationIdInput = document.getElementById('destination_id');
+					if (destinationIdInput) {
+						destinationIdInput.value = '';
+					}
 					document.getElementById('destination_name').value = '';
+					document.getElementById('province_name').value = '';
+
 					submitButton.disabled = true;
 					destinationSearch.focus();
 				};
@@ -482,6 +502,13 @@
 						alert('Silakan pilih destinasi dari hasil pencarian');
 						return false;
 					}
+
+					// Log form data before submit for debugging
+					const formData = new FormData(addressForm);
+					console.log('Form data being submitted:');
+					for (let [key, value] of formData.entries()) {
+						console.log(key + ': ' + value);
+					}
 				});
 
 				// Function to add new address
@@ -489,8 +516,11 @@
 					addressForm.reset();
 					clearDestinationSelection();
 
-					addressModalLabel.textContent = 'Tambah Alamat Baru';
+					// Reset form action and method
+					addressForm.action = "{{ route("account.address.add") }}";
+					addressMethod.value = 'POST';
 
+					addressModalLabel.textContent = 'Tambah Alamat Baru';
 					$('#addressModal').modal('show');
 				};
 
@@ -501,7 +531,6 @@
 
 					addressForm.action = `/account/address/${addressId}`;
 					addressMethod.value = 'PUT';
-					document.getElementById('address_id').value = addressId;
 
 					addressModalLabel.textContent = 'Edit Alamat';
 

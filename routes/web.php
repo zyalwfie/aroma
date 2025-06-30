@@ -94,8 +94,8 @@ Route::prefix('api')->group(function () {
 
     Route::post('/cost', [RajaOngkirController::class, 'cost']);
 
-    Route::get('/provinces', [RajaOngkirController::class, 'provinces']);
-    Route::get('/cities', [RajaOngkirController::class, 'cities']);
+    // Route::get('/provinces', [RajaOngkirController::class, 'provinces']);
+    // Route::get('/cities', [RajaOngkirController::class, 'cities']);
 
 });
 

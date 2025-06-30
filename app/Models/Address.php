@@ -16,15 +16,14 @@ class Address extends Model
      */
     protected $fillable = [
         'user_id',
+        'destination_id',
+        'destination_name',
+        'city_name',
+        'province_name',
         'label',
-        'province_id',
-        'province',
-        'city_id',
-        'city',
         'address',
         'zip',
         'phone',
-        'is_default'
     ];
 
     /**
