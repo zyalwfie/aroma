@@ -83,12 +83,6 @@ class RajaOngkirService
         });
     }
 
-    /**
-     * Mendapatkan detail destinasi berdasarkan ID
-     *
-     * @param string $destinationId
-     * @return array|null
-     */
     public function getDestinationDetail(string $destinationId): ?array
     {
         $cacheKey = 'rajaongkir_destination_' . $destinationId;
@@ -122,29 +116,19 @@ class RajaOngkirService
         });
     }
 
-    /**
-     * Menghitung biaya pengiriman
-     *
-     * @param string $destination ID destinasi tujuan
-     * @param int $weight Berat dalam gram
-     * @param string $courier Kode kurir (jne, pos, tiki)
-     * @return array
-     */
     public function getCost(string $destination, int $weight, string $courier): array
     {
         try {
             $response = Http::withHeaders([
                 'key' => $this->apiKey
-            ])->post($this->baseUrl . '/calculate/domestic-cost', [
-                'origin' => $this->origin,
-                'destination' => $destination,
-                'weight' => $weight,
-                'courier' => $courier
-            ]);
+            ])->post($this->baseUrl . "/calculate/domestic-cost?origin=151&destination=$destination&weight=$weight&courier=$courier");
 
             if ($response->successful()) {
                 $data = $response->json();
-                return $data['rajaongkir']['results'] ?? $data['results'] ?? [];
+
+                Log::info('RajaOngkir getCost data:', ['data' => $data]);
+
+                return $data['data'] ?? [];
             }
 
             Log::error('RajaOngkir getCost Error', [
@@ -163,25 +147,5 @@ class RajaOngkirService
 
             return [];
         }
-    }
-
-    /**
-     * Legacy method - untuk kompatibilitas mundur
-     * @deprecated Gunakan searchDestination() sebagai gantinya
-     */
-    public function getProvinces(): array
-    {
-        // Return empty array atau implementasi fallback
-        return [];
-    }
-
-    /**
-     * Legacy method - untuk kompatibilitas mundur
-     * @deprecated Gunakan searchDestination() sebagai gantinya
-     */
-    public function getCities(?string $provinceId = null): array
-    {
-        // Return empty array atau implementasi fallback
-        return [];
     }
 }

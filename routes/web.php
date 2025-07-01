@@ -93,21 +93,6 @@ Route::prefix('api')->group(function () {
     });
 
     Route::post('/cost', [RajaOngkirController::class, 'cost']);
-
-    // Route::get('/provinces', [RajaOngkirController::class, 'provinces']);
-    // Route::get('/cities', [RajaOngkirController::class, 'cities']);
-
 });
-
-// Route::middleware(['auth'])->group(function () {
-
-//     Route::prefix('account/address')->group(function () {
-//         Route::get('/{id}/data', [App\Http\Controllers\Frontend\AccountController::class, 'getAddressData']);
-//         Route::post('/', [App\Http\Controllers\Frontend\AccountController::class, 'addAddress'])->name('account.address.add');
-//         Route::put('/{id}', [App\Http\Controllers\Frontend\AccountController::class, 'updateAddress'])->name('account.address.update');
-//         Route::delete('/{id}', [App\Http\Controllers\Frontend\AccountController::class, 'deleteAddress'])->name('account.address.delete');
-//     });
-
-// });
 
 require __DIR__.'/auth.php';

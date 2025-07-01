@@ -146,9 +146,7 @@
 				const totalWeight = 1000;
 				const shippingLoading = document.querySelector('.shipping-loading');
 				const shippingContainer = document.querySelector('.shipping-container');
-                const address = document.querySelectorAll('input[type="radio"][name="address_id"]');
-
-                console.log(address);
+				const address = document.querySelectorAll('input[type="radio"][name="address_id"]');
 
 				let selectedDestinationId = null;
 
@@ -183,9 +181,9 @@
 								'X-Requested-With': 'XMLHttpRequest'
 							},
 							body: JSON.stringify({
-								destination: destinationId,
+								destination: 501,
 								weight: totalWeight,
-								courier: 'jne,jnt,sicepat'
+								courier: 'jne,jnt'
 							})
 						});
 
@@ -212,7 +210,6 @@
 						console.error('Error fetching shipping costs:', error);
 						shippingSelect.innerHTML = '<option value="">Error: Gagal mengambil data ongkir</option>';
 
-						// Show more specific error message
 						if (error.message.includes('not JSON')) {
 							shippingSelect.innerHTML = '<option value="">Error: Server response invalid</option>';
 						} else if (error.message.includes('401') || error.message.includes('403')) {
@@ -236,23 +233,15 @@
 					data.forEach(courier => {
 						const courierName = courier.name || courier.code;
 
-						if (courier.costs && courier.costs.length > 0) {
-							courier.costs.forEach(service => {
-								if (service.cost && service.cost.length > 0) {
-									const serviceName = service.service;
-									const cost = service.cost[0].value;
-									const etd = service.cost[0].etd || 'N/A';
+						const serviceName = courier.service || 'Layanan Tidak Diketahui';
+						const cost = courier.cost;
+						const etd = courier.etd || 'N/A';
+						const optionText =
+							`${courierName} ${serviceName} (${etd}) - Rp${cost.toLocaleString('id-ID')}`;
+						const optionValue = `${courier.code}:${cost}`;
 
-									const etdText = etd.includes('HARI') ? etd : `${etd} hari`;
-									const optionText =
-										`${courierName} ${serviceName} (${etdText}) - Rp ${cost.toLocaleString('id-ID')}`;
-									const optionValue = `${courier.code}:${cost}`;
-
-									const option = new Option(optionText, optionValue);
-									shippingSelect.add(option);
-								}
-							});
-						}
+						const option = new Option(optionText, optionValue);
+						shippingSelect.add(option);
 					});
 
 					if (shippingSelect.options.length === 1) {
