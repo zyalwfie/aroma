@@ -10,9 +10,17 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Auth;
 use App\Models\Order;
 use App\Models\Review;
+use App\Models\User;
 
 class AccountController extends Controller
 {
+    protected $userModel;
+
+    public function __construct()
+    {
+        $this->userModel = new User();
+    }
+
     public function index()
     {
         $user = auth()->user()->load('addresses');
@@ -24,7 +32,10 @@ class AccountController extends Controller
     // ===================== PROFILE =====================
     public function updateProfile(Request $request)
     {
+
         $user = auth()->user();
+        $userData = $this->userModel->where('id', $user->id)->first();
+        // dd($userData->name);
 
         $request->validate([
             'name' => 'required|string|max:255',
@@ -40,9 +51,11 @@ class AccountController extends Controller
             $user->name = $request->name;
         }
 
-        $user->email = $request->email;
-        $user->phone = $request->phone;
-        // $user->save();
+        $userData->name = $request->name;
+        $userData->email = $request->email;
+        $userData->phone = $request->phone;
+
+        $userData->save();
 
         return back()->with('success', 'Profil berhasil diperbarui.');
     }

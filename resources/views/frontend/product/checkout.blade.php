@@ -208,12 +208,12 @@
 						}
 					} catch (error) {
 						console.error('Error fetching shipping costs:', error);
-						shippingSelect.innerHTML = '<option value="">Error: Gagal mengambil data ongkir</option>';
+						resetShippingSelect('Error: Gagal mengambil data ongkir');
 
 						if (error.message.includes('not JSON')) {
-							shippingSelect.innerHTML = '<option value="">Error: Server response invalid</option>';
+							resetShippingSelect('Error: Server response invalid');
 						} else if (error.message.includes('401') || error.message.includes('403')) {
-							shippingSelect.innerHTML = '<option value="">Error: Authentication failed</option>';
+							resetShippingSelect('Error: Authentication failed');
 						}
 					} finally {
 						hideLoading();
@@ -221,33 +221,81 @@
 					}
 				}
 
+				// PERBAIKAN 3: Fungsi terpisah untuk reset select
+				function resetShippingSelect(message = 'Pilih alamat pengiriman terlebih dahulu') {
+					shippingSelect.innerHTML = '';
+					const defaultOption = document.createElement('option');
+					defaultOption.value = '';
+					defaultOption.textContent = message;
+					shippingSelect.appendChild(defaultOption);
+
+					// Reset shipping cost
+					shippingCostEl.innerText = 'Rp 0';
+					totalCostEl.innerText = `Rp ${subtotal.toLocaleString('id-ID')}`;
+				}
+
 				function updateShippingOptions(data) {
-					shippingSelect.innerHTML = '<option value="">Pilih metode pengiriman</option>';
+					console.log('Updating shipping options with data:', data); // PERBAIKAN 4: Debug log
+
+					// PERBAIKAN 5: Clear select dengan lebih eksplisit
+					shippingSelect.innerHTML = '';
+
+					// Add default option
+					const defaultOption = document.createElement('option');
+					defaultOption.value = '';
+					defaultOption.textContent = 'Pilih metode pengiriman';
+					shippingSelect.appendChild(defaultOption);
 
 					if (!data || data.length === 0) {
-						shippingSelect.innerHTML +=
-							'<option value="" disabled>Tidak ada layanan pengiriman tersedia</option>';
+						const noServiceOption = document.createElement('option');
+						noServiceOption.value = '';
+						noServiceOption.disabled = true;
+						noServiceOption.textContent = 'Tidak ada layanan pengiriman tersedia';
+						shippingSelect.appendChild(noServiceOption);
 						return;
 					}
 
-					data.forEach(courier => {
-						const courierName = courier.name || courier.code;
+					// PERBAIKAN 6: Iterasi dengan struktur data yang lebih fleksibel
+					data.forEach((courier, index) => {
+						console.log(`Processing courier ${index}:`, courier); // Debug log
 
-						const serviceName = courier.service || 'Layanan Tidak Diketahui';
-						const cost = courier.cost;
+						// Handle different response structures
+						let courierName, services;
+
+						if (courier.name || courier.code) {
+							// Structure: [{name: 'JNE', code: 'jne', services: [...]}]
+							courierName = courier.name || courier.code.toUpperCase();
+							services = courier.service; // Fallback to courier itself if no services
+						} else {
+							// Direct service structure
+							courierName = courier.name || 'Unknown';
+							services = [courier];
+						}
+
+						const serviceName = courier.service || courier.name ||
+							'Layanan Tidak Diketahui';
+						const cost = courier.cost || 0;
 						const etd = courier.etd || 'N/A';
+
 						const optionText =
 							`${courierName} ${serviceName} (${etd}) - Rp${cost.toLocaleString('id-ID')}`;
-						const optionValue = `${courier.code}:${cost}`;
+						const optionValue = `${courier.code || courierName.toLowerCase()}:${cost}`;
 
-						const option = new Option(optionText, optionValue);
-						shippingSelect.add(option);
+						const option = document.createElement('option');
+						option.value = optionValue;
+						option.textContent = optionText;
+
+						shippingSelect.appendChild(option);
+                        shippingSelect.style.display = 'block';
+						console.log('Added option:', optionText);
 					});
 
-					if (shippingSelect.options.length === 1) {
-						shippingSelect.innerHTML +=
-							'<option value="" disabled>Tidak ada layanan pengiriman tersedia</option>';
-					}
+					const changeEvent = new Event('change', {
+						bubbles: true
+					});
+					shippingSelect.dispatchEvent(changeEvent);
+
+					console.log('Final select innerHTML:', shippingSelect.innerHTML);
 				}
 
 				function updateTotal() {
@@ -262,22 +310,33 @@
 					const costPart = selectedOption.value.split(':')[1];
 					const cost = parseInt(costPart, 10);
 
+					if (isNaN(cost)) {
+						console.error('Invalid cost value:', costPart);
+						shippingCostEl.innerText = 'Rp 0';
+						totalCostEl.innerText = `Rp ${subtotal.toLocaleString('id-ID')}`;
+						return;
+					}
+
 					shippingCostEl.innerText = `Rp ${cost.toLocaleString('id-ID')}`;
 					totalCostEl.innerText = `Rp ${(subtotal + cost).toLocaleString('id-ID')}`;
 				}
 
+				// PERBAIKAN 8: Event listener yang lebih robust
 				address.forEach(function(item) {
 					item.addEventListener('change', function() {
 						if (this.checked) {
 							const destinationId = this.dataset.destination;
+							console.log('Address changed, destination ID:', destinationId); // Debug log
 
 							if (destinationId) {
-								console.log('Selected address with destination ID:', destinationId);
+								// Reset select terlebih dahulu
+								shippingSelect.disabled = true;
+								resetShippingSelect('Memuat opsi pengiriman...');
+
 								fetchShippingCost(destinationId);
 							} else {
 								console.error('No destination ID found for selected address');
-								shippingSelect.innerHTML =
-									'<option value="">Error: Alamat tidak memiliki ID destinasi</option>';
+								resetShippingSelect('Error: Alamat tidak memiliki ID destinasi');
 								shippingSelect.disabled = false;
 							}
 						}
@@ -285,6 +344,9 @@
 				});
 
 				shippingSelect.addEventListener('change', updateTotal);
+
+				// Initialize
+				resetShippingSelect();
 
 				// Handle Midtrans callback
 				if (window.location.href.includes('payment_status')) {
